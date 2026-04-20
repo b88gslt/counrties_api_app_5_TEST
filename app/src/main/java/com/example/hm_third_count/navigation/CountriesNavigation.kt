@@ -1,6 +1,7 @@
 package com.example.hm_third_count.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -15,8 +16,9 @@ fun CountriesNavigation(navController: NavHostController) {
     NavHost(navController = navController, startDestination = "countries") {
         composable("countries") {
             val viewModel: CountriesViewModel = hiltViewModel()
+            val uiState by viewModel.uiState
             CountriesScreen(
-                uiState = viewModel.uiState,
+                uiState = uiState,
                 onEvent = viewModel::onEvent,
                 onCountryClick = { navController.navigate("detail/$it") }
             )
@@ -24,8 +26,9 @@ fun CountriesNavigation(navController: NavHostController) {
 
         composable("detail/{countryCode}") {
             val viewModel: CountryDetailViewModel = hiltViewModel()
+            val uiState by viewModel.uiState
             CountryDetailScreen(
-                uiState = viewModel.uiState,
+                uiState = uiState,
                 onEvent = viewModel::onEvent,
                 onBackClick = { navController.popBackStack() }
             )

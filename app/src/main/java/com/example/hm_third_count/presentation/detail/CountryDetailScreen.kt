@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,7 +30,12 @@ fun CountryDetailScreen(
         modifier = modifier.fillMaxSize()
     ) {
         TopAppBar(
-            title = { Text(uiState.country?.name?.common ?: "Country Details") },
+            title = {
+                Text(
+                    text = uiState.country?.name?.common ?: "Country Details",
+                    modifier = Modifier.testTag("detail_top_bar_title")
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = onBackClick) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -99,7 +105,10 @@ private fun ErrorContent(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.error
             )
-            Button(onClick = onRetry) {
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.testTag("retry_button")
+            ) {
                 Text("Retry")
             }
         }
@@ -131,7 +140,10 @@ private fun CountryDetailContent(country: Country) {
         }
         
         // Basic Information
-        InfoSection(title = "Basic Information") {
+        InfoSection(
+            title = "Basic Information",
+            modifier = Modifier.testTag("detail_basic_information")
+        ) {
             InfoItem("Official Name", country.name.official)
             InfoItem("Common Name", country.name.common)
             InfoItem("Capital", country.capital?.joinToString(", ") ?: "No capital")
@@ -189,10 +201,11 @@ private fun CountryDetailContent(country: Country) {
 @Composable
 private fun InfoSection(
     title: String,
+    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(

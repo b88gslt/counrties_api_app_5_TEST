@@ -1,99 +1,78 @@
 package com.example.hm_third_count
 
-import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
-import com.example.hm_third_count.data.model.Country
-import com.example.hm_third_count.data.model.CountryFlags
-import com.example.hm_third_count.data.model.CountryName
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.example.hm_third_count.data.local.AppDatabase
 import com.example.hm_third_count.data.repository.CountriesRepository
 import com.example.hm_third_count.presentation.detail.CountryDetailEvent
 import com.example.hm_third_count.presentation.detail.CountryDetailViewModel
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
+import com.google.common.truth.Truth.assertThat
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class CountryDetailViewModelTest {
 
     @get:Rule
-    val instantTaskRule = InstantTaskExecutorRule()
+    val mainDispatcherRule = MainDispatcherRule()
 
-    private val testDispatcher = StandardTestDispatcher()
+    private lateinit var db: AppDatabase
+    private lateinit var api: FakeCountriesApi
     private lateinit var repository: CountriesRepository
 
-    private val fakeCountry = Country(
-        name = CountryName(common = "France", official = "French Republic"),
-        code = "FRA",
-        capital = listOf("Paris"),
-        region = "Europe",
-        population = 67000000L,
-        flags = CountryFlags(png = "https://flag.png", svg = "https://flag.svg")
-    )
-
     @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-        repository = mockk(relaxed = true)
+    fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        api = FakeCountriesApi()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        repository = CountriesRepository(api, db.favoriteDao(), testJson())
     }
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        db.close()
     }
 
-    private fun createViewModel(code: String = "FRA"): CountryDetailViewModel {
-        val savedStateHandle = SavedStateHandle(mapOf("countryCode" to code))
-        return CountryDetailViewModel(repository, savedStateHandle)
-    }
-
-    // Тест 7: SavedStateHandle корректно передаёт countryCode и загружает нужную страну
     @Test
-    fun `SavedStateHandle provides correct countryCode and loads right country`() = runTest {
-        coEvery { repository.isFavorite("FRA") } returns false
-        coEvery { repository.getCountryByCode("FRA") } returns Result.success(fakeCountry)
-
-        val viewModel = createViewModel("FRA")
-        advanceUntilIdle()
-
-        assertEquals("FRA", viewModel.countryCode)
-        assertEquals("France", viewModel.uiState.country?.name?.common)
-        assertNull(viewModel.uiState.error)
+    fun usesCountryCodeFromSavedStateHandle() {
+        val country = testCountry(code = "AAA", commonName = "Alpha")
+        api.byCodeHandler = { code ->
+            assertThat(code).isEqualTo("AAA")
+            listOf(country)
+        }
+        val handle = SavedStateHandle(mapOf("countryCode" to "AAA"))
+        val vm = CountryDetailViewModel(repository, handle)
+        val s = vm.uiState.value
+        assertThat(s.country?.code).isEqualTo("AAA")
+        assertThat(s.country?.name?.common).isEqualTo("Alpha")
+        assertThat(s.error).isNull()
     }
 
-    // Тест 8 (нетривиальный): retry() на detail-экране инициирует новый запрос именно для нужного id
     @Test
-    fun `retry on detail screen triggers new request for same countryCode`() = runTest {
-        coEvery { repository.isFavorite("FRA") } returns false
-        coEvery { repository.getCountryByCode("FRA") } returnsMany listOf(
-            Result.failure(RuntimeException("Not found")),
-            Result.success(fakeCountry)
-        )
+    fun retry_afterFailure_callsApiAgain() {
+        var calls = 0
+        api.byCodeHandler = {
+            calls++
+            if (calls == 1) throw java.io.IOException("fail")
+            listOf(testCountry(code = "Z", commonName = "Zed"))
+        }
+        val vm = CountryDetailViewModel(repository, SavedStateHandle(mapOf("countryCode" to "Z")))
+        assertThat(vm.uiState.value.error).isNotNull()
+        assertThat(calls).isEqualTo(1)
 
-        val viewModel = createViewModel("FRA")
-        advanceUntilIdle()
-
-        assertNotNull(viewModel.uiState.error)
-
-        viewModel.onEvent(CountryDetailEvent.Retry)
-        advanceUntilIdle()
-
-        // Проверяем что запрос был именно для "FRA", дважды
-        coVerify(exactly = 2) { repository.getCountryByCode("FRA") }
-        assertNull(viewModel.uiState.error)
-        assertEquals("France", viewModel.uiState.country?.name?.common)
+        vm.onEvent(CountryDetailEvent.Retry)
+        assertThat(calls).isEqualTo(2)
+        assertThat(vm.uiState.value.country?.name?.common).isEqualTo("Zed")
+        assertThat(vm.uiState.value.error).isNull()
     }
 }
