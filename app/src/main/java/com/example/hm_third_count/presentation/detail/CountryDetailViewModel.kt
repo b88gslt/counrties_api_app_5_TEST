@@ -1,13 +1,14 @@
 package com.example.hm_third_count.presentation.detail
 
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hm_third_count.data.repository.CountriesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -17,13 +18,14 @@ class CountryDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    val countryCode: String = checkNotNull(savedStateHandle["countryCode"])
+    private val countryCode: String = checkNotNull(savedStateHandle["countryCode"])
 
-    var uiState by mutableStateOf(CountryDetailUiState())
-        private set
+    private val _uiState = mutableStateOf(CountryDetailUiState(isLoading = true))
+    val uiState: State<CountryDetailUiState> = _uiState
 
     init {
         loadCountryDetail()
+        observeFavorites()
     }
 
     fun onEvent(event: CountryDetailEvent) {
@@ -35,19 +37,39 @@ class CountryDetailViewModel @Inject constructor(
 
     private fun loadCountryDetail() {
         viewModelScope.launch {
-            uiState = uiState.copy(isLoading = true, error = null)
-            val isFav = repository.isFavorite(countryCode)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             repository.getCountryByCode(countryCode)
-                .onSuccess { uiState = uiState.copy(isLoading = false, country = it, isFavorite = isFav) }
-                .onFailure { e -> uiState = uiState.copy(isLoading = false, error = e.message ?: "Failed to load country details", isFavorite = isFav) }
+                .onSuccess { country ->
+                    if (country == null) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            country = null,
+                            error = "Country not found"
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(isLoading = false, country = country, error = null)
+                    }
+                }
+                .onFailure {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = it.message ?: "Failed to load country details"
+                    )
+                }
         }
     }
 
     private fun toggleFavorite() {
         viewModelScope.launch {
+            val country = _uiState.value.country ?: return@launch
             if (repository.isFavorite(countryCode)) repository.removeFromFavorites(countryCode)
-            else repository.addToFavorites(countryCode)
-            uiState = uiState.copy(isFavorite = repository.isFavorite(countryCode))
+            else repository.addToFavorites(country)
         }
+    }
+
+    private fun observeFavorites() {
+        repository.favorites
+            .onEach { codes -> _uiState.value = _uiState.value.copy(isFavorite = countryCode in codes) }
+            .launchIn(viewModelScope)
     }
 }

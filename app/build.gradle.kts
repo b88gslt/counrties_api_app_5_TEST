@@ -40,22 +40,15 @@ android {
     buildFeatures {
         compose = true
     }
-    packaging {
-        resources {
-            excludes += setOf(
-                "META-INF/LICENSE.md",
-                "META-INF/LICENSE-notice.md",
-                "META-INF/NOTICE.md",
-                "META-INF/AL2.0",
-                "META-INF/LGPL2.1"
-            )
-        }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -84,7 +77,11 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    kspAndroidTest(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    // Инструментальные тесты выполняются в процессе приложения: эти артефакты должны быть в debug-APK
+    debugImplementation(libs.hilt.android.testing)
+    debugImplementation(libs.androidx.test.core)
 
     // Room
     implementation(libs.room.runtime)
@@ -92,20 +89,20 @@ dependencies {
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.mockk)
-    testImplementation(libs.arch.core.testing)
+    testImplementation(libs.turbine)
+    testImplementation(libs.truth)
+    testImplementation(libs.robolectric)
 
+    androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.test.core)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.room.testing)
-    androidTestImplementation(libs.mockk.android)
-    androidTestImplementation(libs.hilt.android.testing)
-    kspAndroidTest(libs.hilt.compiler)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.truth)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

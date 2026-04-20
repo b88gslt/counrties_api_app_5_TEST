@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,8 +87,7 @@ private fun RegionFilter(
     modifier: Modifier = Modifier
 ) {
     val regions = listOf("Africa", "Americas", "Asia", "Europe", "Oceania")
-    val regionNames = listOf("Africa", "Americas", "Asia", "Europe", "Oceania")
-    
+
     LazyRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -105,10 +105,11 @@ private fun RegionFilter(
         }
         
         items(regions.size) { index ->
+            val region = regions[index]
             FilterChip(
-                onClick = { onRegionSelected(regions[index]) },
-                label = { Text(regionNames[index]) },
-                selected = selectedRegion == regions[index] && !showFavoritesOnly
+                onClick = { onRegionSelected(region) },
+                label = { Text(region) },
+                selected = selectedRegion == region && !showFavoritesOnly
             )
         }
     }
@@ -148,7 +149,10 @@ private fun ErrorContent(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.error
             )
-            Button(onClick = onRetry) {
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.testTag("retry_button")
+            ) {
                 Text("Retry")
             }
         }
@@ -173,7 +177,7 @@ private fun CountriesList(
     countries: List<Country>,
     favorites: Set<String>,
     onCountryClick: (String) -> Unit,
-    onFavoriteClick: (String) -> Unit,
+    onFavoriteClick: (Country) -> Unit,
     showFavoritesOnly: Boolean = false
 ) {
     if (showFavoritesOnly && countries.isEmpty()) {
@@ -214,7 +218,7 @@ private fun CountriesList(
                     country = country,
                     isFavorite = favorites.contains(country.code),
                     onClick = { onCountryClick(country.code) },
-                    onFavoriteClick = { onFavoriteClick(country.code) }
+                    onFavoriteClick = { onFavoriteClick(country) }
                 )
             }
         }
@@ -231,6 +235,7 @@ private fun CountryItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("country_row_${country.code}")
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {

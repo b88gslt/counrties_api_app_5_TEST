@@ -4,6 +4,7 @@ kotlin = "2.0.21"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.2.1"
+androidxTestCore = "1.6.1"
 espressoCore = "3.6.1"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
@@ -18,18 +19,19 @@ hilt = "2.51.1"
 hiltNavigationCompose = "1.2.0"
 room = "2.6.1"
 ksp = "2.0.21-1.0.27"
-coroutinesTest = "1.8.1"
-mockk = "1.13.12"
-androidxTestCore = "1.6.1"
-androidxTestRunner = "1.6.2"
-archCoreTesting = "2.2.0"
+coroutinesTest = "1.9.0"
+turbine = "1.2.0"
+robolectric = "4.14.1"
+truth = "1.4.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
@@ -67,16 +69,13 @@ hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-com
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
-# Test
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
-mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
-mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
-androidx-test-core = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCore" }
-androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+truth = { group = "com.google.truth", name = "truth", version.ref = "truth" }
 hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testing", version.ref = "hilt" }
-arch-core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "archCoreTesting" }
+androidx-lifecycle-runtime-testing = { group = "androidx.lifecycle", name = "lifecycle-runtime-testing", version.ref = "lifecycleRuntimeKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

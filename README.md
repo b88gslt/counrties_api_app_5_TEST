@@ -73,44 +73,43 @@ Android приложение для изучения стран мира с ис
 ![2](screenshots/room2.png)
 ![3](screenshots/room3.png)
 
-## Тесты: 
-
-**Юнит-тесты (10 штук):**
-
-**CountriesViewModelTest — 6 тестов:**
-1. начальное состояние: isLoading=true, список пустой, ошибки нет
-2. успешная загрузка: список заполнен, isLoading=false, error=null
-3. ошибка загрузки: error заполнен, список пустой
-4. retry после ошибки: API вызван ровно 2 раза через coVerify ← нетривиальный
-5. пустой результат даёт isEmpty=true, а не Success(emptyList)
-6. цепочка состояний error → retry → success с проверкой промежуточных состояний ← нетривиальный
-
-**CountryDetailViewModelTest — 2 теста:**
-- SavedStateHandle передаёт правильный countryCode и загружает нужную страну
-- retry на detail-экране делает новый запрос именно для того же countryCode ← нетривиальный
-
-**ModelMappingTest — 2 теста:**
-- toCountry() корректно маппит все поля из API-модели в доменную
-- null-поля в API-модели остаются null в доменной, без случайных дефолтов
-
-**Интеграционные тесты (9 штук):**
-
-**FavoriteDaoTest — 3 теста  (реальный Room in-memory):**
-- insert → read: данные корректно записываются и читаются
-- двойной insert не создаёт дубль (OnConflictStrategy.IGNORE) ← нетривиальный
-- delete удаляет запись, isFavorite возвращает false
-
-**CountriesRepositoryIntegrationTest — 3 теста (Repository + FakeApi + реальный Room):**
-- полный цикл избранного: добавить, проверить, получить список, удалить
-- повторное добавление через Repository не создаёт дубль ← нетривиальный
-- ошибка FakeApi возвращает Result.failure с правильным сообщением
-
-**CountriesScreenIntegrationTest — 3 теста (Compose UI на эмуляторе):**
-- success-состояние: на экране видны название страны и столица
-- error-состояние → клик Retry → событие CountriesEvent.Retry сработало
-- клик по стране вызывает навигацию именно с кодом "DEU" ← нетривиальный
-
 ## Возможные ошибки: 
 
 **Плохо подгружаются данные с сайта** - если так получилось то во время запуска самого приложения и когда оно пишет Loading countries...
 то включите ВПН и данные подгрузятся легко, либо можете поробовать сразу включить ВПН, не знаю  с чем это связано , но проблмы были только без ВПН
+
+## Тесты
+
+JVM (src/test) - кол-во 13
+Инструментальные (src/androidTest) - кол-во 3
+
+**Юнит-тесты:**
+    - ApiCountriesCountryMappingTest - toCountry_mapsAlpha3CapitalAndCurrencies
+    - CountriesViewModelInitialStateTest - initialUiState_beforeCoroutinesRun_isDefault
+    - CountriesViewModelTest - loadCountries_success_updatesList; loadCountries_failure_thenRetry_succeeds; searchEmptyResult_showsEmptyState_notSuccessWithData; search_onlyLatestQueryRuns_afterRapidTyping
+    - CountryDetailViewModelTest - usesCountryCodeFromSavedStateHandle; retry_afterFailure_callsApiAgain
+
+**Интеграционные тесты:**
+    - CountriesRepositoryRoomIntegrationTest - repositoryWithRoom_writeFavorite_readBackSameSnapshot
+    - CountriesRepositoryFavoritesFlowTest - favorites_emitsEmptyThenCodesThenEmpty_onInsertAndDelete; favorites_eachNewSubscription_emitsCurrentSetFirst; favorites_afterLastExpectedEmission_noPendingDuplicatesInChannel; secondAddSameFavorite_stillSingleRowInRoom
+    - CountriesErrorRetryComposeTest - errorOnLoad_thenRetry_triggersNewRequestAndShowsList
+    - CountriesListLoadedContentTest - afterSuccessfulLoad_listShowsExpectedCountryTitles
+    - CountriesListDetailNavigationTest - list_clickNavigatesToDetail_forMatchingCountryCode
+
+**Покрытые сценарии:**
+
+    - Маппинг DTO API → модель страны. 
+    - Список: загрузка, ошибка + Retry, пустой поиск, debounce при быстром вводе, начальный UI до корутин. 
+    - Деталь: код из SavedStateHandle, ошибка + Retry. 
+    - Репозиторий/Room/Flow избранного: запись и чтение из БД, цепочка эмиссий favorites, новая подписка видит актуальное состояние, нет лишних эмиссий, дубликат в избранном не плодит строки. 
+    - Android: Retry после ошибки, отображение списка, переход в деталь и вызов API по коду.
+
+**Flow проверяется у repository.favorites в CountriesRepositoryFavoritesFlowTest**
+
+**Последовательности эмиссий:**
+
+    - favorites_emitsEmptyThenCodesThenEmpty_onInsertAndDelete — ∅ → {код} после добавления в избранное → ∅ после удаления. 
+    - favorites_eachNewSubscription_emitsCurrentSetFirst — первая подписка начинается с ∅ (потом отмена); после addToFavorites каждая новая подписка первой эмиссией получает актуальное множество ({SUB}). 
+    - favorites_afterLastExpectedEmission_noPendingDuplicatesInChannel — ∅ → {ONE} после добавления, дальше expectNoEvents() (лишних эмиссий нет).
+
+Тест secondAddSameFavorite_stillSingleRowInRoom на Flow смотрит только финальное значение через .first(), не цепочку эмиссий.

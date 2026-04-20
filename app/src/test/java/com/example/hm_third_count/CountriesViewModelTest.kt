@@ -1,176 +1,136 @@
 package com.example.hm_third_count
 
-import androidx.arch.core.executor.testing.InstantTaskExecutorRule
-import com.example.hm_third_count.data.model.Country
-import com.example.hm_third_count.data.model.CountryFlags
-import com.example.hm_third_count.data.model.CountryName
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.example.hm_third_count.data.local.AppDatabase
 import com.example.hm_third_count.data.repository.CountriesRepository
 import com.example.hm_third_count.presentation.countries.CountriesEvent
 import com.example.hm_third_count.presentation.countries.CountriesViewModel
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
+import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class CountriesViewModelTest {
 
     @get:Rule
-    val instantTaskRule = InstantTaskExecutorRule()
+    val mainDispatcherRule = MainDispatcherRule()
 
-    private val testDispatcher = StandardTestDispatcher()
+    private lateinit var db: AppDatabase
+    private lateinit var api: FakeCountriesApi
     private lateinit var repository: CountriesRepository
-    private lateinit var viewModel: CountriesViewModel
-
-    private val fakeCountry = Country(
-        name = CountryName(common = "Germany", official = "Federal Republic of Germany"),
-        code = "DEU",
-        capital = listOf("Berlin"),
-        region = "Europe",
-        population = 83000000L,
-        flags = CountryFlags(png = "https://flag.png", svg = "https://flag.svg")
-    )
 
     @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-        repository = mockk(relaxed = true)
+    fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        api = FakeCountriesApi()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        repository = CountriesRepository(api, db.favoriteDao(), testJson())
     }
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        db.close()
     }
 
-    // Тест 1: корректное начальное состояние до завершения загрузки
     @Test
-    fun `initial state has isLoading true and no error`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returns Result.success(listOf(fakeCountry))
-
-        viewModel = CountriesViewModel(repository)
-
-        // До завершения корутины — isLoading = true
-        assertTrue(viewModel.uiState.isLoading)
-        assertNull(viewModel.uiState.error)
-        assertTrue(viewModel.uiState.countries.isEmpty())
+    fun loadCountries_success_updatesList() {
+        val country = testCountry()
+        api.allCountries = listOf(country)
+        val vm = CountriesViewModel(repository)
+        val state = vm.uiState.value
+        assertThat(state.isLoading).isFalse()
+        assertThat(state.error).isNull()
+        assertThat(state.countries).containsExactly(country)
     }
 
-    // Тест 2: успешная загрузка данных
     @Test
-    fun `successful load populates countries and clears loading`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returns Result.success(listOf(fakeCountry))
+    fun loadCountries_failure_thenRetry_succeeds() {
+        api.failGetAll = true
+        val vm = CountriesViewModel(repository)
+        assertThat(vm.uiState.value.error).isNotNull()
+        assertThat(api.getAllInvocations).isEqualTo(1)
 
-        viewModel = CountriesViewModel(repository)
-        advanceUntilIdle()
+        api.failGetAll = false
+        api.allCountries = listOf(testCountry())
+        vm.onEvent(CountriesEvent.Retry)
 
-        val state = viewModel.uiState
-        assertEquals(false, state.isLoading)
-        assertNull(state.error)
-        assertEquals(1, state.countries.size)
-        assertEquals("Germany", state.countries.first().name.common)
+        assertThat(vm.uiState.value.error).isNull()
+        assertThat(vm.uiState.value.countries).hasSize(1)
+        assertThat(api.getAllInvocations).isEqualTo(2)
     }
 
-    // Тест 3: ошибка загрузки — error != null, isLoading = false
     @Test
-    fun `failed load sets error and clears loading`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returns Result.failure(RuntimeException("Network error"))
+    fun searchEmptyResult_showsEmptyState_notSuccessWithData() = runTest {
+        val scheduler = TestCoroutineScheduler()
+        val main = StandardTestDispatcher(scheduler)
+        Dispatchers.setMain(main)
+        try {
+            api.allCountries = listOf(testCountry())
+            val vm = CountriesViewModel(repository)
+            scheduler.advanceUntilIdle()
+            assertThat(vm.uiState.value.countries).isNotEmpty()
 
-        viewModel = CountriesViewModel(repository)
-        advanceUntilIdle()
+            api.searchHandler = { emptyList() }
+            vm.onEvent(CountriesEvent.SearchQueryChanged("zzz"))
+            scheduler.advanceTimeBy(350)
+            scheduler.advanceUntilIdle()
 
-        val state = viewModel.uiState
-        assertEquals(false, state.isLoading)
-        assertEquals("Network error", state.error)
-        assertTrue(state.countries.isEmpty())
+            val s = vm.uiState.value
+            assertThat(s.isLoading).isFalse()
+            assertThat(s.error).isNull()
+            assertThat(s.countries).isEmpty()
+            assertThat(s.isEmpty).isTrue()
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
-    // Тест 4 (нетривиальный): retry() действительно инициирует новый запрос к API
     @Test
-    fun `retry after error triggers new API call`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returnsMany listOf(
-            Result.failure(RuntimeException("Network error")),
-            Result.success(listOf(fakeCountry))
-        )
+    fun search_onlyLatestQueryRuns_afterRapidTyping() = runTest {
+        val scheduler = TestCoroutineScheduler()
+        val main = StandardTestDispatcher(scheduler)
+        Dispatchers.setMain(main)
+        try {
+            api.allCountries = listOf(testCountry(code = "OLD", commonName = "Old"))
+            val vm = CountriesViewModel(repository)
+            scheduler.advanceUntilIdle()
 
-        viewModel = CountriesViewModel(repository)
-        advanceUntilIdle()
+            api.searchHandler = { q ->
+                listOf(testCountrySearchMatch(code = "NEW", name = "Result-$q"))
+            }
 
-        // Убеждаемся что первый вызов дал ошибку
-        assertNotNull(viewModel.uiState.error)
+            vm.onEvent(CountriesEvent.SearchQueryChanged("a"))
+            scheduler.advanceTimeBy(100)
+            vm.onEvent(CountriesEvent.SearchQueryChanged("b"))
+            scheduler.advanceTimeBy(350)
+            scheduler.advanceUntilIdle()
 
-        // Вызываем retry
-        viewModel.onEvent(CountriesEvent.Retry)
-        advanceUntilIdle()
-
-        // API должен быть вызван дважды
-        coVerify(exactly = 2) { repository.getAllCountries() }
-
-        // После retry — успешное состояние
-        val state = viewModel.uiState
-        assertNull(state.error)
-        assertEquals(1, state.countries.size)
-    }
-
-    // Тест 5: пустой результат даёт isEmpty = true, а не Success(emptyList)
-    @Test
-    fun `empty result from API gives isEmpty true not success with list`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returns Result.success(emptyList())
-
-        viewModel = CountriesViewModel(repository)
-        advanceUntilIdle()
-
-        val state = viewModel.uiState
-        assertEquals(false, state.isLoading)
-        assertNull(state.error)
-        assertTrue(state.countries.isEmpty())
-        // isEmpty = true означает Empty-состояние, а не Success с данными
-        assertTrue(state.isEmpty)
-    }
-
-    // Тест 6 (нетривиальный): состояние после ошибки и повторной загрузки переходит корректно
-    @Test
-    fun `state transitions correctly from error through retry to success`() = runTest {
-        coEvery { repository.getFavorites() } returns emptySet()
-        coEvery { repository.getAllCountries() } returnsMany listOf(
-            Result.failure(RuntimeException("Timeout")),
-            Result.success(listOf(fakeCountry))
-        )
-
-        viewModel = CountriesViewModel(repository)
-        advanceUntilIdle()
-
-        // Шаг 1: ошибка
-        assertNotNull(viewModel.uiState.error)
-        assertTrue(viewModel.uiState.countries.isEmpty())
-
-        // Шаг 2: retry — сразу после вызова должен быть isLoading = true, error = null
-        viewModel.onEvent(CountriesEvent.Retry)
-        assertTrue(viewModel.uiState.isLoading)
-        assertNull(viewModel.uiState.error)
-
-        // Шаг 3: после завершения — успех
-        advanceUntilIdle()
-        assertNull(viewModel.uiState.error)
-        assertEquals(false, viewModel.uiState.isLoading)
-        assertEquals(1, viewModel.uiState.countries.size)
+            assertThat(api.searchInvocations).isEqualTo(1)
+            assertThat(api.lastSearchQuery).isEqualTo("b")
+            assertThat(vm.uiState.value.countries.single().code).isEqualTo("NEW")
+            assertThat(vm.uiState.value.countries.single().name.common).isEqualTo("Result-b")
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 }
